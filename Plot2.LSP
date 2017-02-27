@@ -200,7 +200,7 @@
   )
 
   
-(defun c:xx ( / lst resultFiles resultDv )
+(defun c:xx ( / lst resultFiles resultDv)
   
   (cd:subroutines)
 
@@ -222,26 +222,74 @@
 
 
 
-  (defun odcl:fillDataGrid(<Control> lst) ; <Control>... Form2/Dialog1/datagrid1
+  (defun odcl:fillDataGrid(<Control> lst / i len count r c lyCount lyNames) ; <Control>... Form2/Dialog1/datagrid1
 
     ; Remove / clean all columns from datagrid before add 
     (repeat (setq count (dcl-grid-getcolumncount <Control>))
       (dcl-Grid-DeleteColumn <Control> (setq count (1- count))))
 
-    ; Add new columns with name
-    (if (setq count (length lst) c 0) ; c...column r... row
-      (repeat count
-	(setq r 0)
-	(dcl-Grid-InsertColumn <Control> c (car (nth c lst)) 0 100 )
-	(setq c (1+ c)))
+    ; Add rows
+    ; Calculate largest list in variable lst to rowCount
+    (setq i 0)
+    (foreach x lst
+      (setq len (length (mapcar 'car (cadr x))))
+      (if (< i len)
+	(setq i len)
+	(setq len i)
+	)
+      )
+       
+			  
+    (repeat i
+      (dcl-Grid-InsertRow
+	    <Control>; Form2/Dialog1/datagrid1
+	    (setq i (1- i)) ; intRow [als Long] {intColumn0ImageIndex [als Integer]}
+	    ""; strColumn0Label [als String] {strColumn1Label [als String] strColumn2Label [als String]} ...
+	  )
       )
 
-    (foreach s (cadr (nth c lst))
-	  (dcl-Grid-SetCellText <Control> r c (car s))
+    ; Add new columns with name
+    (dcl-Grid-InsertColumn <Control> 0 "" 0 20 ) ; insert first empty column
+    (if (setq count (length lst) c 1) ; c...column r... row
+      (repeat count
+	(setq r 0)
+	
+	(dcl-Grid-InsertColumn <Control> c (car (nth c lst)) 0 100 )
+
+	(setq lyCount (length (cadr (nth c lst)))
+	      lyNames (reverse (mapcar 'car (cadr (nth c lst)))))
+
+	(repeat lyCount
+	  (dcl-Grid-SetCellStyle
+	    <Control> ; Form2/Dialog1/datagrid1
+	    r ; intRow [als Long]
+	    c ; intColumn [als Long]
+	    1 ; intStyle [als Integer] ... with checkbox
+	    )
+
+	  (dcl-Grid-SetCellText
+	    <Control>; Form2/Dialog1/datagrid1
+	    r ; intRow [als Long]
+	    c ; intColumn [als Long]
+	    (nth (setq lyCount (1- lyCount)) lyNames) ; strLabel [als String]
+	    )
 	  (setq r (1+ r))
 	  )
-
+        
+        (setq c (1+ c)))
+      )
     )
+
+  (defun c:Form2/Dialog1/cmdDone#OnClicked (/)
+    (dcl-Form-Close Form2/Dialog1)
+    )
+
+  
+  (defun c:Form2/Dialog1/datagrid1#OnColumnClick (intColumn /)
+   (dcl-MessageBox "column click!")
+   )
+
+ 
   
   ; -----------------------------------------------------------------------------------
   ; Main functions                                                                    ;
