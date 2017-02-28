@@ -156,62 +156,109 @@
 ;;-----------------------------------------------------------------------------------------------;;
   (defun SelectDrawing(dwg)
     (cond
-;;;      ((null (if (setq dwg (getfiled "Select Drawing to Steal From"
-;;;			       (cond
-;;;				 ((and (setq dir (getenv "infratools\\scr"))
-;;;				       (setq dir (strcat (vl-filename-directory dir) "\\"))
-;;;				       (vl-file-directory-p dir)
-;;;				       )
-;;;				  dir
-;;;				  )
-;;;				 (   ""   )
-;;;				 )
-;;;			       "dwg;dwt;dws"
-;;;			       16
-;;;			       )
-;;;		 )
-;;;	     (setenv "infratools\\scr" (strcat (vl-filename-directory dwg) "\\"))
-;;;	     )
-;;;	   )
-;;;     (princ "\nNo File select!")
-;;;     )
-    
-    ((null (setq dbdoc (steal:getdocumentobject dwg)))
-     (princ (strcat "\nUnable to Interface with drawing: " dwg))
-     )
-    ((setq acdoc (vla-get-activedocument (vlax-get-acad-object))
- 	   acdic (vla-get-dictionaries acdoc)
-	   dbdic (vla-get-dictionaries dbdoc)
-	   acext (if (= :vlax-true (vla-get-hasextensiondictionary (vla-get-layers acdoc)))
-   		   (vla-getextensiondictionary (vla-get-layers acdoc))
-		   )
-	   dbext (if (= :vlax-true (vla-get-hasextensiondictionary (vla-get-layers dbdoc)))
-		   (vla-getextensiondictionary (vla-get-layers dbdoc))
-		   )
-	   acdata (list
-                    (list "Layouts" (steal:getprop acdoc 'layouts) (steal:getprop dbdoc 'layouts))
-                   )
-	   dbdata (vl-remove 'nil (mapcar (function (lambda ( x ) (apply 'steal:getdata x))) acdata))
-	   )
+      ((null (setq dbdoc (steal:getdocumentobject dwg)))
+       (princ (strcat "\nUnable to Interface with drawing: " dwg))
+       )
+      ((setq acdoc (vla-get-activedocument (vlax-get-acad-object))
+	     acdic (vla-get-dictionaries acdoc)
+	     dbdic (vla-get-dictionaries dbdoc)
+	     acext (if (= :vlax-true (vla-get-hasextensiondictionary (vla-get-layers acdoc)))
+		     (vla-getextensiondictionary (vla-get-layers acdoc))
+		     )
+	     dbext (if (= :vlax-true (vla-get-hasextensiondictionary (vla-get-layers dbdoc)))
+		     (vla-getextensiondictionary (vla-get-layers dbdoc))
+		     )
+	     acdata (list
+		      (list "Layouts" (steal:getprop acdoc 'layouts) (steal:getprop dbdoc 'layouts))
+		      )
+	     dbdata (vl-remove 'nil (mapcar (function (lambda ( x ) (apply 'steal:getdata x))) acdata))
+	     )
+       )
       )
-     )
+    (if (and (= 'vla-object (type dbdoc)) (not (vlax-object-released-p dbdoc)))
+        (vlax-release-object dbdoc)
+    )
     (list (list "File" dwg) (list "Data" (list dbdata)))
     )
+
+;;-----------------------------------------------------------------------------------------------;;
+  
+  (defun cd:SYS_GetDateTime (Format)
+    (menucmd (strcat "m=$(edtime,$(getvar,DATE)," Format ")"))
+    )
+  
+;;-----------------------------------------------------------------------------------------------;;
+ 
   )
 
   
-(defun c:xx ( / lst resultFiles resultDv)
+(defun c:xx ( /
+	     
+	     resultDv
+	     )
   
   (cd:subroutines)
+  (setq resultFiles nil)
+
+  (defun lisp:CreateCmdFile(filename /)
+    (setq file (open filename "w"))
+    )
+
+  (defun lisp:CreatePlotScriptFile(filename /)
+    (setq file (open filename "w"))
+    )
+
+  (defun lisp:WriteCMDString(file dwgFile scrFile)
+    (write-line (strcat
+;;;		  "\"C:/Program Files/Autodesk/AutoCAD 2017/accoreconsole.exe" "\"" " /i "
+		  "\"C:/Program Files/Autodesk/Autodesk AutoCAD Civil 3D 2014/accoreconsole.exe" "\"" " /i "
+		  "\"" (acet-str-replace "\\" "/" dwgFile) "\"" " /s "
+		  "\"" (acet-str-replace "\\" "/" scrFile) "\"" " /l en-US")
+      file)
+    )
+
+  (defun lisp:WritePlotScript(filename layout / file) 
+    (setq file (open filename "w"))
+    (write-line "-PLOT" file)
+    (write-line "N" file)
+    (write-line (strcat layout  "\n") file)
+    (write-line (strcat  "DWG To PDF.pc3" "\n") file)
+    (write-line "N" file)
+    (write-line "Y" file)
+;;;    (write-line "CLOSE" file)
+;;;    (write-line "Y" file)
+    (close file)
+    )
+
+  (defun lisp:Open ( target / Shell result )
+    
+    (setq Shell (vla-getInterfaceObject (vlax-get-acad-object) "Shell.Application"))
+
+    (setq result
+      (and (or (eq 'INT (type target)) (setq target (findfile target)))
+        (not
+          (vl-catch-all-error-p
+            (vl-catch-all-apply 'vlax-invoke (list Shell 'Open target))
+          )
+        )
+      )
+    )
+    
+    (vlax-release-object Shell)
+    result
+  )
+
+  
 
   ; -----------------------------------------------------------------------------------
-  ; Odcl functions                                                                    ;
+  ; Odcl Form2 functions                                                              ;
   ; -----------------------------------------------------------------------------------
   (defun c:Form2/Dialog2#OnInitialize (/)
     (princ "\nFiles selected")
    )
 
-  (defun c:Form2/Dialog1#OnInitialize (/ lst)
+  (defun c:Form2/Dialog1#OnInitialize (/ )
+    (odcl:fillDataGrid Form2/Dialog1/datagrid1 lst)
     (princ "\nLoaded...")
     )
 
@@ -220,7 +267,60 @@
     (princ "\n Dialog closed!")
     )
 
+  (defun c:Form2/Dialog1/cmdDone#OnClicked (/)
+    (dcl-Form-Close Form2/Dialog1)
+    )
 
+ 
+  (defun c:Form2/Dialog1/cmdPrint#OnClicked (/)
+    (setq datum (cd:SYS_GetDateTime "YYYYMODD"))
+
+    (setq cmdFileName  (strcase (vl-filename-mktemp "Plot" (vl-filename-directory (vl-filename-mktemp )) ".cmd")))
+    (setq cmdFile (lisp:CreateCmdFile cmdFileName))
+    (foreach x resultFiles
+      (foreach y clst ; List of all selected Layouts in File
+	(setq scrFileName (strcat (vl-filename-directory (vl-filename-mktemp ))  "\\" (car y) ".scr"))
+	(setq scrFile (lisp:CreatePlotScriptFile scrFileName))
+	
+	(cond
+	  ((= (vl-filename-base x) (car y))
+	   (lisp:WritePlotScript scrFileName (cdr y))
+	   )
+	  )
+	)
+      (close scrFile)
+      (lisp:WriteCMDString cmdFile x scrFileName) ; x... DrawingFile
+      )
+    (close cmdFile)
+    (if cmdFileName
+      (lisp:Open cmdFileName)
+      )
+
+    )
+
+  (defun c:Form2/Dialog1/datagrid1#OnSelChanged (intRow intColumn /)
+    (setq <Control> Form2/Dialog1/datagrid1
+	  cCaptions (cdr (dcl-Control-GetColumnCaptionList <Control>))
+	  )
+	  
+    (if (= 0 (dcl-Grid-GetCellCheckState <Control> intRow intColumn)) ; 1... checkbox checked!
+      (setq  itemTxt (dcl-Grid-GetCellText <Control> intRow intColumn)
+	     cTxt (nth (1- intColumn) cCaptions)
+	     item (cons cTxt itemTxt)
+	     clst (append clst (list item))
+	     )
+      )
+    (cdr clst)
+    )
+
+  
+  (defun c:Form2/Dialog1/datagrid1#OnColumnClick (intColumn /)
+   (dcl-MessageBox "column click!")
+   )
+
+  ; -----------------------------------------------------------------------------------
+  ; Odcl functions                                                                    ;
+  ; -----------------------------------------------------------------------------------
 
   (defun odcl:fillDataGrid(<Control> lst / i len count r c lyCount lyNames) ; <Control>... Form2/Dialog1/datagrid1
 
@@ -250,14 +350,16 @@
 
     ; Add new columns with name
     (dcl-Grid-InsertColumn <Control> 0 "" 0 20 ) ; insert first empty column
-    (if (setq count (length lst) c 1) ; c...column r... row
+    (if (setq count (length lst) c 1 item 0) ; c...column r... row
       (repeat count
+	
 	(setq r 0)
 	
-	(dcl-Grid-InsertColumn <Control> c (car (nth c lst)) 0 100 )
+	(dcl-Grid-InsertColumn <Control> c (car (nth item lst)) 0 100 )
 
-	(setq lyCount (length (cadr (nth c lst)))
-	      lyNames (reverse (mapcar 'car (cadr (nth c lst)))))
+	(setq lyCount (length (cadr (nth item lst)))
+	      lyNames (reverse (mapcar 'car (cadr (nth item lst)))))
+
 
 	(repeat lyCount
 	  (dcl-Grid-SetCellStyle
@@ -276,18 +378,33 @@
 	  (setq r (1+ r))
 	  )
         
-        (setq c (1+ c)))
+        (setq c (1+ c) item (1+ item))
+	)
       )
     )
 
-  (defun c:Form2/Dialog1/cmdDone#OnClicked (/)
-    (dcl-Form-Close Form2/Dialog1)
-    )
+  (defun odcl:getDataGrid(<Control> cInt /)
+    (setq result '())
+    (setq cCount (dcl-Grid-GetColumnCount <Control>)) 
+    (setq rCount (dcl-Grid-GetRowCount <Control>))
 
-  
-  (defun c:Form2/Dialog1/datagrid1#OnColumnClick (intColumn /)
-   (dcl-MessageBox "column click!")
-   )
+    
+    
+    (if (and cCount rCount)
+      (repeat (setq c (1- cCount))
+	(setq value (dcl-Grid-GetColumnCells <Control> c ))
+	(setq cHeader (dcl-Control-GetColumnHeader <Control>))
+	(setq result (list cHeader))
+	(repeat (setq r rCount)
+	  (setq value (dcl-Grid-GetCellText <Control> r c))
+	  (setq result (append result (list value)))
+	  (setq r (1- r))
+	  )
+	)
+      )
+    result
+    )
+    
 
  
   
@@ -296,12 +413,13 @@
   ; -----------------------------------------------------------------------------------
 
 
-  (setq cmdecho (getvar "CMDECHO"))
+  (setq cmdecho (getvar "CMDECHO")
+	lst nil) ; List with selected Drawings and included Layouts
   (setvar "CMDECHO" 0)
   (command "_OPENDCL")
   (setvar "CMDECHO" cmdecho)
 
-  (dcl-project-load "H:\\Dropbox\\2014\\AF-Infrastructure-Tools\\Plot\\Form2.odcl")
+  (dcl-project-load "H:\\Dropbox\\2014\\AF-Infrastructure-Tools\\BatchPlot\\_Lisp project\\Form2.odcl")
   (if (/= 2 (setq resultFiles (dcl-Form-Show Form2/Dialog2))) ; Select Drawing files!
     (foreach x resultFiles
       (foreach y (cdr (assoc "Data" (SelectDrawing x)))
@@ -313,7 +431,6 @@
   (cond
     ((/= lst nil)
      (setq resultDv (dcl-Form-Show Form2/Dialog1))
-     (odcl:fillDataGrid Form2/Dialog1/datagrid1 lst)
      )
     
     )
